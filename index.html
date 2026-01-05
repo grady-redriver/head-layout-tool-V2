@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Head Layout Tool</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 18px; }
+    .card { max-width: 980px; margin: 0 auto; border: 1px solid #ddd; border-radius: 12px; padding: 16px; }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { display:block; font-size: 13px; color:#333; margin-bottom:6px; }
+    input, select, textarea, button {
+      width: 100%; box-sizing: border-box; padding: 10px;
+      border: 1px solid #ccc; border-radius: 10px; font-size: 14px;
+    }
+    textarea { min-height: 86px; }
+    .actions { display:flex; gap:10px; flex-wrap: wrap; margin-top: 12px; }
+    button { cursor:pointer; }
+    .hint { font-size: 12px; color:#666; margin-top: 6px; line-height: 1.35; }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+    th, td { border-bottom: 1px solid #eee; padding: 10px 8px; text-align: left; }
+    th { font-size: 12px; color:#444; text-transform: uppercase; letter-spacing: .04em; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .err { color: #b00020; font-size: 13px; margin-top: 10px; }
+    .pillbar { display:flex; flex-wrap: wrap; gap:8px; margin-top: 8px; }
+    .pill { width: auto; padding: 8px 10px; border-radius: 999px; border: 1px solid #ccc; background:#fff; }
+    .pill:active { transform: translateY(1px); }
+    @media (max-width: 760px) { .row { grid-template-columns: 1fr; } }
+    @media print {
+      .no-print { display:none !important; }
+      body { margin: 0; }
+      .card { border: none; border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Head Layout Tool</h1>
+
+    <div class="no-print">
+      <label>Total outside circumference (single input)</label>
+      <!-- inputmode=text so phones show the full keyboard -->
+      <input id="circ" type="text" inputmode="text" autocomplete="off"
+             placeholder='Example: 28&#39; 5 1/2&quot;  (or 341&quot;)' />
+      <div class="pillbar">
+        <button class="pill" type="button" data-insert="'">Insert &#39;</button>
+        <button class="pill" type="button" data-insert="&quot;">Insert &quot;</button>
+        <button class="pill" type="button" data-insert=" 1/2">1/2</button>
+        <button class="pill" type="button" data-insert=" 1/4">1/4</button>
+        <button class="pill" type="button" data-insert=" 3/4">3/4</button>
+        <button class="pill" type="button" data-insert=" 1/8">1/8</button>
+        <button class="pill" type="button" data-insert=" 3/8">3/8</button>
+        <button class="pill" type="button" data-insert=" 5/8">5/8</button>
+        <button class="pill" type="button" data-insert=" 7/8">7/8</button>
+      </div>
+      <div class="hint">
+        Examples:
+        <span class="mono">28' 5 1/2"</span>,
+        <span class="mono">28ft 5 1/2in</span>,
+        <span class="mono">341"</span>,
+        <span class="mono">215 5/8"</span>,
+        <span class="mono">215-5/8"</span>
+      </div>
+    </div>
+
+    <div class="row no-print" style="margin-top:12px;">
+      <div>
+        <label>Round to nearest</label>
+        <select id="denom">
+          <option value="16" selected>1/16"</option>
+          <option value="8">1/8"</option>
+          <option value="32">1/32"</option>
+          <option value="4">1/4"</option>
+          <option value="64">1/64"</option>
+        </select>
+      </div>
+      <div>
+        <label>Auto list: every N degrees (0–360)</label>
+        <input id="step" type="number" step="1" value="45" />
+        <div class="hint">Example: 45 gives 45, 90, 135… 360.</div>
+      </div>
+    </div>
+
+    <div class="row no-print" style="margin-top:12px;">
+      <div>
+        <label>Custom degrees (optional)</label>
+        <textarea id="custom" placeholder="Example: 45, 90, 135, 180&#10;Or: 22.5 67.5 112.5"></textarea>
+        <div class="hint">If filled in, overrides the degree step.</div>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <div class="hint">Math: <span class="mono">distance = circumference × (degree / 360)</span></div>
+      </div>
+    </div>
+
+    <div class="actions no-print">
+      <button id="calc" type="button">Calculate</button>
+      <button id="copy" type="button">Copy table</button>
+      <button type="button" onclick="window.print()">Print</button>
+      <button id="clear" type="button">Clear</button>
+    </div>
+
+    <div id="err" class="err"></div>
+
+    <table id="out" style="display:none;">
+      <thead>
+        <tr>
+          <th>Degree</th>
+          <th>Distance from start (ft-in)</th>
+          <th class="mono">Decimal inches</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+<script>
+  // ---------- helpers ----------
+  function gcd(a,b){ a=Math.abs(a); b=Math.abs(b); while(b){ [a,b]=[b,a%b]; } return a||1; }
+
+  function parseInchComponent(str){
+    if(str == null) return NaN;
+    let s = String(str).trim();
+    if(!s) return 0;
+
+    s = s.replace(/"/g, "").replace(/-/g, " ");
+    s = s.replace(/\s+/g, " ").trim();
+
+    // decimal
+    if(/^[+-]?\d+(\.\d+)?$/.test(s)) return Number(s);
+
+    const parts = s.split(" ").filter(Boolean);
+
+    // "3/8"
+    if(parts.length === 1 && parts[0].includes("/")){
+      const [n,d] = parts[0].split("/").map(Number);
+      if(!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return NaN;
+      return n/d;
+    }
+
+    // "5 3/8"
+    if(parts.length === 2 && parts[1].includes("/")){
+      const whole = Number(parts[0]);
+      const [n,d] = parts[1].split("/").map(Number);
+      if(!Number.isFinite(whole) || !Number.isFinite(n) || !Number.isFinite(d) || d === 0) return NaN;
+      return whole + (n/d);
+    }
+
+    // "5 / 8"
+    const joined = parts.join("");
+    if(joined.includes("/")){
+      const [n,d] = joined.split("/").map(Number);
+      if(!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return NaN;
+      return n/d;
+    }
+
+    const num = Number(joined);
+    return Number.isFinite(num) ? num : NaN;
+  }
+
+  // Parse full length to inches
+  function parseLengthToInches(input){
+    if(input == null) return NaN;
+    let s = String(input).trim();
+    if(!s) return NaN;
+
+    // normalize quotes
+    s = s.replace(/[”]/g, '"').replace(/[’]/g, "'").replace(/,/g, " ");
+
+    // symbols -> tokens
+    s = s.replace(/'/g, " ft ").replace(/"/g, " in ");
+
+    // word units normalize
+    s = s.replace(/\bfeet\b/gi, "ft")
+         .replace(/\bfoot\b/gi, "ft")
+         .replace(/\bft\b/gi, "ft")
+         .replace(/\binches\b/gi, "in")
+         .replace(/\binch\b/gi, "in")
+         .replace(/\bin\b/gi, "in");
+
+    s = s.replace(/\s+/g, " ").trim();
+
+    const hasFt = /\bft\b/i.test(s);
+    const hasIn = /\bin\b/i.test(s);
+
+    if(hasFt || hasIn){
+      let feet = 0;
+      let inches = 0;
+
+      const ftMatch = s.match(/([+-]?\d+(\.\d+)?)\s*ft\b/i);
+      if(ftMatch){
+        feet = Number(ftMatch[1]);
+        if(!Number.isFinite(feet)) return NaN;
+      }
+
+      if(hasIn){
+        let beforeIn = s.split(/\bin\b/i)[0].trim(); // "... in"
+        if(/\bft\b/i.test(beforeIn)){
+          beforeIn = beforeIn.split(/\bft\b/i)[1].trim(); // inch part only
+        }
+        inches = parseInchComponent(beforeIn);
+        if(!Number.isFinite(inches)) return NaN;
+      }
+
+      return feet * 12 + inches;
+    }
+
+    // inches-only fallback
+    s = s.replace(/"/g, "").replace(/-/g, " ").trim();
+    return parseInchComponent(s);
+  }
+
+  // Convert decimal inches to feet+inches string, rounded to denom
+  function inchesToFeetInches(inches, denom){
+    const sign = inches < 0 ? "-" : "";
+    inches = Math.abs(inches);
+
+    const rounded = Math.round(inches * denom) / denom;
+
+    let ft = Math.floor(rounded / 12);
+    let rem = rounded - ft * 12;
+
+    let wholeIn = Math.floor(rem + 1e-12);
+    let frac = rem - wholeIn;
+
+    let num = Math.round(frac * denom);
+    if(num === denom){ wholeIn += 1; num = 0; }
+    if(wholeIn === 12){ ft += 1; wholeIn = 0; }
+
+    let inchStr = "";
+    if(num === 0){
+      inchStr = `${wholeIn}"`;
+    } else {
+      const g = gcd(num, denom);
+      num /= g; denom /= g;
+      inchStr = wholeIn === 0 ? `${num}/${denom}"` : `${wholeIn} ${num}/${denom}"`;
+    }
+
+    return `${sign}${ft}' ${inchStr}`;
+  }
+
+  function parseDegrees(text){
+    const parts = text.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+    return parts.map(p => Number(p)).filter(n => Number.isFinite(n));
+  }
+
+  function makeDegreeList(step){
+    const out = [];
+    for(let d = step; d <= 360 + 1e-9; d += step){
+      out.push(Math.round(d * 1000000) / 1000000);
+      if(out.length > 2000) break;
+    }
+    return out;
+  }
+
+  // ---------- main calc ----------
+  function calc(){
+    const err = document.getElementById("err");
+    err.textContent = "";
+
+    const C = parseLengthToInches(document.getElementById("circ").value);
+    if(!Number.isFinite(C) || C <= 0){
+      err.textContent = `Enter a valid circumference (example: 28' 5 1/2" or 341").`;
+      return;
+    }
+
+    const denom = Number(document.getElementById("denom").value) || 16;
+    const custom = document.getElementById("custom").value.trim();
+    const step = Number(document.getElementById("step").value);
+
+    let degrees = [];
+    if(custom){
+      degrees = parseDegrees(custom);
+      if(degrees.length === 0){
+        err.textContent = "Custom degrees box has no readable numbers.";
+        return;
+      }
+    } else {
+      if(!Number.isFinite(step) || step <= 0){
+        err.textContent = "Enter a valid degree step (greater than 0).";
+        return;
+      }
+      degrees = makeDegreeList(step);
+    }
+
+    degrees = degrees.filter(d => d >= 0 && d <= 360);
+    degrees = Array.from(new Set(degrees)).sort((a,b)=>a-b);
+
+    const tbody = document.querySelector("#out tbody");
+    tbody.innerHTML = "";
+
+    for(const d of degrees){
+      const distIn = C * (d / 360);
+      const ftInStr = inchesToFeetInches(distIn, denom);
+
+      const tr = document.createElement("tr");
+      const td1 = document.createElement("td"); td1.textContent = `${d}°`;
+      const td2 = document.createElement("td"); td2.textContent = ftInStr;
+      const td3 = document.createElement("td"); td3.className = "mono"; td3.textContent = distIn.toFixed(6);
+
+      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById("out").style.display = "";
+  }
+
+  function copyTable(){
+    const table = document.getElementById("out");
+    if(table.style.display === "none") return;
+
+    const rows = [...table.querySelectorAll("tr")].map(tr =>
+      [...tr.children].map(td => td.textContent).join("\t")
+    ).join("\n");
+
+    navigator.clipboard.writeText(rows).catch(()=>{});
+  }
+
+  // Insert helpers (mobile)
+  function insertAtCursor(input, text){
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const v = input.value;
+    input.value = v.slice(0, start) + text + v.slice(end);
+    const pos = start + text.length;
+    input.focus();
+    input.setSelectionRange(pos, pos);
+  }
+
+  document.querySelectorAll("[data-insert]").forEach(btn=>{
+    btn.addEventListener("click", () => {
+      insertAtCursor(document.getElementById("circ"), btn.getAttribute("data-insert"));
+    });
+  });
+
+  document.getElementById("calc").addEventListener("click", calc);
+  document.getElementById("copy").addEventListener("click", copyTable);
+  document.getElementById("clear").addEventListener("click", () => {
+    document.getElementById("circ").value = "";
+    document.getElementById("custom").value = "";
+    document.getElementById("step").value = 45;
+    document.getElementById("denom").value = 16;
+    document.getElementById("out").style.display = "none";
+    document.querySelector("#out tbody").innerHTML = "";
+    document.getElementById("err").textContent = "";
+  });
+
+  // Enter to calculate
+  document.getElementById("circ").addEventListener("keydown",(e)=>{ if(e.key==="Enter") calc(); });
+</script>
+</body>
+</html>
