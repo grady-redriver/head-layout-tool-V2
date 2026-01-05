@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Head Layout Tool</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 18px; }
+    .card { max-width: 980px; margin: 0 auto; border: 1px solid #ddd; border-radius: 12px; padding: 16px; }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { display:block; font-size: 13px; color:#333; margin-bottom:6px; }
+    input, select, textarea, button {
+      width: 100%; box-sizing: border-box; padding: 10px;
+      border: 1px solid #ccc; border-radius: 10px; font-size: 14px;
+    }
+    textarea { min-height: 86px; }
+    .actions { display:flex; gap:10px; flex-wrap: wrap; margin-top: 12px; }
+    button { cursor:pointer; }
+    .hint { font-size: 12px; color:#666; margin-top: 6px; line-height: 1.35; }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+    th, td { border-bottom: 1px solid #eee; padding: 10px 8px; text-align: left; }
+    th { font-size: 12px; color:#444; text-transform: uppercase; letter-spacing: .04em; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .err { color: #b00020; font-size: 13px; margin-top: 10px; }
+    .pillbar { display:flex; flex-wrap: wrap; gap:8px; margin-top: 8px; }
+    .pill { width: auto; padding: 8px 10px; border-radius: 999px; border: 1px solid #ccc; background:#fff; }
+    .pill:active { transform: translateY(1px); }
+    @media (max-width: 760px) { .row { grid-template-columns: 1fr; } }
+    @media print {
+      .no-print { display:none !important; }
+      body { margin: 0; }
+      .card { border: none; border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Head Layout Tool</h1>
+
+    <div class="no-print">
+      <label>Total outside circumference (single input)</label>
+      <!-- NOTE: inputmode=text so phones show the full keyboard with symbols available -->
+      <input id="circ" type="text" inputmode="text" autocomplete="off"
+             placeholder='Example: 28&#39; 5 1/2&quot;  (or 341&quot;)' />
+      <div class="pillbar">
+        <button class="pill" type="button" data-insert="'">Insert &#39;</button>
+        <button class="pill" type="button" data-insert="&quot;">Insert &quot;</button>
+        <button class="pill" type="button" data-insert=" 1/2">1/2</button>
+        <button class="pill" type="button" data-insert=" 1/4">1/4</button>
+        <button class="pill" type="button" data-insert=" 3/4">3/4</button>
+        <button class="pill" type="button" data-insert=" 1/8">1/8</button>
+        <button class="pill" type="button" data-insert=" 3/8">3/8</button>
+        <button class="pill" type="button" data-insert=" 5/8">5/8</button>
+        <button class="pill" type="button" data-insert=" 7/8">7/8</button>
+      </div>
+      <div class="hint">
+        Accepts: <span class="mono">28' 5 1/2"</span>, <span class="mono">28ft 5 1/2in</span>, <span class="mono">341"</span>,
+        <span class="mono">215 5/8"</sp
